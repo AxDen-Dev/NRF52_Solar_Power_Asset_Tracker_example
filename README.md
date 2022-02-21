@@ -29,6 +29,12 @@ Bluetooth Solar Power Asset Tracker uses AxDen's Aggregator Platform to collect 
 This is an example that provides quick testing of various service scenarios that require Android, iOS, Aggregator communication or 2G/3G/4G communication.
 <br>
 
+네이버 스마트 스토어에서 구매 가능합니다.
+<br>
+
+[네이버 스마트 스토어](https://smartstore.naver.com/axden)
+<br>
+
 -------------------------
 
 ### Bluetooth Solar Power Asset Tracker 의 주요 특징 및 기능
