@@ -130,7 +130,7 @@ Check whether COMPANY_ID and DEVICE_ID are applied correctly through the termina
 Sensor information can be found on the Web or Mobile as shown in the image below
 <br>
 <br>
-<img src="./asset/GPS_Log.png">
+<img src="./assets/GPS_Log.png">
 
 -------------------------
 
