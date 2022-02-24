@@ -92,16 +92,6 @@ Learn Edge AI using sensor information stored in the AXDEN Aggregator Platform.
 If you have a TCP server, you can check it through the server.
 <br>
 In this example, the IP and Port number of the example server provided by AXDEN are temprarily set.
-<table>
-  <tr align="center">
-    <td>RF RX Sub-G example terminal</td>
-    <td>RF RX 2G/3G/4G Server example log</td>
-  </tr>
-  <tr align="center">
-    <td><img src="./asset/RX_Sub_G.png"></td>
-    <td><img src="./asset/Server_Log.png"></td>
-  </tr>
-</table>
 
 -------------------------
 
