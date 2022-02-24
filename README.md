@@ -68,6 +68,9 @@ Learn Edge AI using sensor information stored in the AXDEN Aggregator Platform.
 
 ### Android Application
 
+[Donwload Android Application](https://play.google.com/store/apps/details?id=io.axden.module.example.axden_ble_module_example)
+<br>
+
 <table>
   <tr align="center">
     <td> </td>
