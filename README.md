@@ -19,31 +19,29 @@
 
 -------------------------
 
-Bluetooth Solar Power Asset Tracker 은 AxDen 의 Aggregator Platform 를 이용하여 온도, 가속도, GPS 위치와 같은 Asset tracking 에 필요한 핵심적인 정보를 수집하고 태양광 충전을 이용하여 배터리를 충전합니다.
-<br>
-Android, iOS, Aggregator 통신 또는 2G/3G/4G 통신이 필요한 다양한 서비스 시나리오를 빠르게 테스트 할 수 있도록 제공하는 예제입니다.
-<br>
-<br>
+
 Bluetooth Solar Power Asset Tracker uses AxDen's Aggregator Platform to collect key information required for asset tracking such as temperature, acceleration, and GPS location.
 <br>
 This is an example that provides quick testing of various service scenarios that require Android, iOS, Aggregator communication or 2G/3G/4G communication.
 <br>
-
-네이버 스마트 스토어에서 구매 가능합니다.
 <br>
-
-[네이버 스마트 스토어](https://smartstore.naver.com/axden)
+Related hardware kits can be purchased from the Naver Smart Store.
+<br>
+[Purchase Link : naver smart store](https://smartstore.naver.com/axden)
+<br>
+<br>
+You can purchase it by contacting sales@axden.io or [www.axden.io](http://www.axden.io/)
 <br>
 
 -------------------------
 
-### Bluetooth Solar Power Asset Tracker 의 주요 특징 및 기능
+### Key features and functions.
 
-MCU | 설명
+MCU | Description
 :-------------------------:|:-------------------------:
 NRF52832 | BLE 5.0 / 5.1 / 5.2 / 5.3
 
-센서 | 설명
+Sensors | Description
 :-------------------------:|:-------------------------:
 BMA400 | 3-Axis acceleration sensor
 SI7051 | temperature sensor
@@ -55,15 +53,15 @@ SPV1050 | Solar battery charger (Max charge current 80mA)
 Solar | On board
 Battery | 3.7V Lithium Battery
 
-Bluetooth Solar Power Asset Tracker 예제는 온도, 가속도, GPS 위치와 같은 Asset tracking 에 필요한 핵심적인 정보를 수집하고 태양광 충전을 이용하여 배터리를 충전합니다.
+The Bluetooth Solar Power Asset Tracker example collects key information necessary for asset tracking, such as temperature, acceleration, and GPS location, and charges the battery using solar charging.
 <br>
-Sub-G 또는 2G/3G/4G 통신으로 수집된 정보를 전송합니다.
-<br>
-<br>
-AxDen Aggregator Platform 과 연동하여 서버, DB 와 같은 인프라 구축 없이 Web 과 Mobile 에서 센서 정보를 확인합니다.
+Transmit the collected information to Bluetooth or 2G/3G/4G communication.
 <br>
 <br>
-AxDen Aggregator Platform 에 저장된 센서 정보를 이용하여 Edge AI 를 학습시킵니다.
+Interwork with AXDEN Aggregator Platform to check sensor information on the web and mobile whitout building infrastructure such as server and DB
+<br>
+<br>
+Learn Edge AI using sensor information stored in the AXDEN Aggregator Platform.
 <br>
 
 -------------------------
@@ -86,65 +84,76 @@ AxDen Aggregator Platform 에 저장된 센서 정보를 이용하여 Edge AI �
 
 -------------------------
 
-### 서버를 이용한 확인 방법
+### How to check using the server.
 
-TCP 서버가 있다면 서버를 통해 확인이 가능합니다.
+If you have a TCP server, you can check it through the server.
 <br>
-
-해당 예제에는 AxDen 에서 제공하는 예제 서버의 IP 와 Port 번호가 임시로 지정되어 있습니다.
-
+In this example, the IP and Port number of the example server provided by AXDEN are temprarily set.
 <table>
   <tr align="center">
+    <td>RF RX Sub-G example terminal</td>
     <td>RF RX 2G/3G/4G Server example log</td>
   </tr>
   <tr align="center">
-    <td><img src="./assets/Server_Log.png"></td>
+    <td><img src="./asset/RX_Sub_G.png"></td>
+    <td><img src="./asset/Server_Log.png"></td>
   </tr>
 </table>
 
 -------------------------
 
-### Solar battery charge 확인 방법
-아래 이미지와 같이 멀티미터를 이용하여 태양광을 이용한 배터리 충전 전류량을 확인할 수 있습니다.
+### How to check the solar battery charge.
+
+As shown in the image below, you can check the amount of battery charging current using sunlight using a multimeter.
 <br>
 
 <img src="./assets/axden_solar_power_charge.png">
 
 -------------------------
 
-### AxDen Aggregator Platform 을 이용한 확인 방법
-AxDen Aggregator 홈페이지에서 회원 가입 후 기기의 MAC Address 를 등록합니다.
+### How to check using AXDEN Aggregator Platform
+
+Register the MAC Address of the device after signing up as a member on the AXDEN Aggregator Platform website.
 <br>
-AxDen Aggregator 홈페이지에서 제공하는 COMPANY ID, DEVICE ID 를 Protocol.h 파일의 COMPANY_ID, DEVICE_ID 에 입력합니다.
+
+Enter COMPANY ID nad DEVCIE ID provided on the AXDEN Aggregator Platform website into COMPANY_ID and DEVCIE_ID in the Protocol.h header file.
 <br>
+
+[AXDEN Aggregator Platfrom](http://project.axden.io/)
 <br>
+
 `#define COMPANY_ID 0`
 <br>
+
 `#define DEVICE_TYPE 0`
 <br>
-<br>
-컴파일 후 플래싱을 합니다.
-<br>
-<br>
-COMPANY_ID, DEVICE_ID 가 정상적으로 적용되었는지 확인합니다.
+
+Complie and flash.
 <br>
 <br>
-아래 이미지처럼 센서 정보를 Web 또는 Mobile 에서 확인할 수 있습니다.
+Check whether COMPANY_ID and DEVICE_ID are applied correctly through the terminal
 <br>
 <br>
-<img src="./assets/GPS_Log.png">
+Sensor information can be found on the Web or Mobile as shown in the image below
+<br>
+<br>
+<img src="./asset/GPS_Log.png">
 
 -------------------------
 
-### 서버 변경
-bg96.c 파일의 `bg96_tcp_data_upload` Function 의 `set_bg96_socket_connect` Function 에서 IP, Port 변경이 가능합니다.
+### How to change the server
+
+IP and Port can be changed in the `set_bg96_socket_connect` function of the `bg96_tcp_data_upload` function of the bg96.c file.
 <br>
-sara_u2.c 파일의 `sara_u2_tcp_data_upload` Function 의 `set_sara_socket_connect` Function 에서 IP, Port 변경이 가능합니다.
+
+IP and Port can be changed in the `sara_u2_tcp_data_upload` function of the `set_sara_socket_connect` function of the sara_u2.c file
+<br>
 
 -------------------------
 
-### 센서 교체
-protocl.h 파일에서 센서 교체가 가능합니다.
+### How th change the GPS and cellular communication module
+
+Module replacement is possible in the Protocol.h file.
 <br>
 
 -------------------------
