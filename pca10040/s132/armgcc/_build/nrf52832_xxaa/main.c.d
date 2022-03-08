@@ -25,6 +25,7 @@ _build/nrf52832_xxaa/main.c.o: ../../../main.c \
  /usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/sys/_pthreadtypes.h \
  /usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/machine/types.h \
  /usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/sys/stdio.h \
+ /usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/math.h \
  ../../../../../../components/libraries/util/nordic_common.h \
  ../../../../../../modules/nrfx/mdk/nrf.h \
  ../../../../../../modules/nrfx/mdk/nrf52.h \
@@ -202,6 +203,8 @@ _build/nrf52832_xxaa/main.c.o: ../../../main.c \
 /usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/machine/types.h:
 
 /usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/sys/stdio.h:
+
+/usr/local/bin/gcc-arm-none-eabi-9-2020-q2-update/arm-none-eabi/include/math.h:
 
 ../../../../../../components/libraries/util/nordic_common.h:
 

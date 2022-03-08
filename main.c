@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "nordic_common.h"
 #include "nrf.h"
@@ -106,6 +107,8 @@
 
 #define CELLUAR_SOCKET_READ_DATA_SIZE 255
 
+#define M_PI 3.14159265358979323846
+
 #define BMA400_ADDRESS 0x14
 #define BMA400_SCALE 0.9765625
 
@@ -131,6 +134,9 @@ const nrf_drv_twi_t m_twi = NRF_DRV_TWI_INSTANCE(0);
 static nrf_saadc_value_t m_buffer_pool_low_power[2][SAADC_SAMPLES_IN_BUFFER];
 static volatile uint8_t m_saadc_initialized = 0x00;
 
+static volatile uint8_t time_stamp_init = 0x00;
+static volatile uint32_t time_stamp = 0;
+
 static volatile uint8_t app_timer_update = 0x00;
 static volatile uint8_t one_sec_timer_update = 0x00;
 
@@ -141,22 +147,37 @@ static volatile uint16_t disconnect_timeout_count = 0;
 static volatile uint8_t request_disconnect = 0x00;
 static volatile uint8_t data_update_state = 0x00;
 
-static uint8_t advertising_data[10] = { 0x00 };
 static int16_t temperature = 0;
 static uint8_t battery_value = 0x00;
+static uint8_t intterupt = 0;
 static int16_t ax = 0;
 static int16_t ay = 0;
 static int16_t az = 0;
-static int32_t lat = 0;
-static int32_t lon = 0;
+static int16_t roll = 0;
+static int16_t pitch = 0;
+static uint8_t HDOP = 0;
+static int32_t latitude = 0;
+static int32_t longitude = 0;
+
+static uint8_t intterupt_buffer = 0;
+static int16_t ax_buffer = 0;
+static int16_t ay_buffer = 0;
+static int16_t az_buffer = 0;
+static int16_t roll_buffer = 0;
+static int16_t pitch_buffer = 0;
 
 static uint8_t mac_address[8] = { 0x00 };
 
-static uint8_t payload_size = 0;
-static uint8_t payload[213];
+static packet_header_0_t packet_header_0;
+static packet_header_1_t packet_header_1;
+static packet_event_0_t packet_event_0;
+static packet_event_1_t packet_event_1;
+static product_id_t product_id;
 
-static uint8_t radio_packet_protocol_size = 0;
-static radio_packet_protocol_t radio_packet_protocol;
+static volatile uint8_t packet_id = 0;
+static volatile uint8_t command_id = 0;
+static volatile uint8_t node_packet_data_size;
+static node_packet_data_t node_packet_data;
 
 static uint16_t tcp_socket_buffer_size;
 static uint8_t tcp_socket_buffer[CELLUAR_SOCKET_READ_DATA_SIZE];
@@ -179,6 +200,10 @@ volatile uint8_t quectel_gps_timer = 0x00;
 volatile uint8_t sara_u2_timer = 0x00;
 volatile uint8_t ublox_gps_timer = 0x00;
 volatile uint8_t si7051_100_ms_timer = 0x00;
+
+static void build_event_packet(uint8_t device_role, uint8_t event_type);
+
+static void build_sensor_data_packet(uint8_t device_role);
 
 /**@brief Struct that contains pointers to the encoded advertising data. */
 static ble_gap_adv_data_t m_adv_data = { .adv_data = { .p_data = m_enc_advdata,
@@ -235,6 +260,12 @@ static void app_time_timeout_handler(void *p_context) {
 			}
 
 			nrf_gpio_pin_toggle(GPIO_LED_1);
+
+		}
+
+		if (time_stamp_init) {
+
+			time_stamp += 1;
 
 		}
 
@@ -432,7 +463,7 @@ static void ble_service_write_handler(uint16_t conn_handle,
 
 		uint8_t control_number = buffer[0];
 
-		if (radio_packet_protocol.Packet.control_number != control_number) {
+		if (command_id != control_number) {
 
 			uint32_t collection_cycle = buffer[1] << 24;
 			collection_cycle |= buffer[2] << 16;
@@ -444,7 +475,7 @@ static void ble_service_write_handler(uint16_t conn_handle,
 				collection_cycle_timeout_count = 0;
 				collection_cycle_timer_count = collection_cycle;
 
-				radio_packet_protocol.Packet.control_number = control_number;
+				command_id = control_number;
 
 			}
 
@@ -933,25 +964,30 @@ static uint8_t i2c_read_buffer(uint8_t address, uint8_t *read_value,
 
 }
 
-static void init_bma400(void) {
+static uint8_t init_bma400() {
 
-	i2c_write16( BMA400_ADDRESS, 0x7E, 0xB6);
+	uint8_t i2c_state = i2c_write16( BMA400_ADDRESS, 0x7E, 0xB6);
 
 	wait_200ms();
 
-	i2c_write16(BMA400_ADDRESS, 0x1A, 0b00000101);
+	i2c_state = i2c_state & i2c_write16(BMA400_ADDRESS, 0x1A, 0b00000101);
 
-	i2c_write16( BMA400_ADDRESS, 0x19, 0b00000010);
+	i2c_state = i2c_state & i2c_write16( BMA400_ADDRESS, 0x19, 0b00000010);
+
+	return i2c_state;
 
 }
 
-static void bma400_acceleration_read(int16_t *ax, int16_t *ay, int16_t *az) {
+static uint8_t bma400_acceleration_read(int16_t *ax, int16_t *ay, int16_t *az) {
+
+	uint8_t i2c_state = 0x01;
 
 	uint8_t rx_buffer[6] = { 0x00 };
 
-	i2c_write8(BMA400_ADDRESS, 0x04);
+	i2c_state = i2c_state & i2c_write8(BMA400_ADDRESS, 0x04);
 
-	i2c_read_buffer(BMA400_ADDRESS, rx_buffer, sizeof(rx_buffer));
+	i2c_state = i2c_state
+			& i2c_read_buffer(BMA400_ADDRESS, rx_buffer, sizeof(rx_buffer));
 
 	int16_t accel = (rx_buffer[1] << 8) | rx_buffer[0];
 
@@ -985,6 +1021,8 @@ static void bma400_acceleration_read(int16_t *ax, int16_t *ay, int16_t *az) {
 
 	NRF_LOG_INFO("BMA400 %d %d %D", *ax, *ay, *az);
 	NRF_LOG_FLUSH();
+
+	return i2c_state;
 
 }
 
@@ -1199,7 +1237,9 @@ static void uart_uninit() {
 
 }
 
-static void init_GPS() {
+static uint8_t init_GPS() {
+
+	uint8_t gps_state = 0x00;
 
 	init_uart_2();
 
@@ -1216,6 +1256,8 @@ static void init_GPS() {
 		set_quectel_gps_nmea_off_gga_only(10);
 
 		set_quectel_gps_sbas_disable(10);
+
+		gps_state = 0x01;
 
 		NRF_LOG_INFO("GPS init success");
 		NRF_LOG_FLUSH();
@@ -1251,9 +1293,13 @@ static void init_GPS() {
 
 	uart_uninit();
 
+	return gps_state;
+
 }
 
-static void update_GPS() {
+static uint8_t update_GPS() {
+
+	uint8_t gps_state = 0x00;
 
 	init_uart_2();
 
@@ -1276,8 +1322,9 @@ static void update_GPS() {
 
 		for (uint16_t i = 0; i < GPS_UPDATE_TIME; i++) {
 
-			lat = quectel_gps_data.latitude;
-			lon = quectel_gps_data.longitude;
+			HDOP = quectel_gps_data.HDOP;
+			latitude = quectel_gps_data.latitude;
+			longitude = quectel_gps_data.longitude;
 
 			if (quectel_gps_data.navigation_statue > 0
 					&& quectel_gps_data.HDOP < 40) {
@@ -1296,6 +1343,8 @@ static void update_GPS() {
 
 		}
 
+		gps_state = 0x01;
+
 	} else {
 
 		NRF_LOG_INFO("GPS init error");
@@ -1311,11 +1360,13 @@ static void update_GPS() {
 
 	uart_uninit();
 
+	return gps_state;
+
 }
 
-static void init_celluar() {
+static uint8_t init_celluar() {
 
-	uint8_t error = 0x00;
+	uint8_t celluar_state = 0x00;
 
 	init_uart_1();
 
@@ -1333,7 +1384,35 @@ static void init_celluar() {
 
 			if (bg96_init_network_setup()) {
 
-				error = 0x01;
+				build_event_packet(0x01, EVENT_TYPE_POWER_ON);
+
+				if (bg96_tcp_data_upload(node_packet_data.buffer,
+						node_packet_data_size)) {
+
+					tcp_socket_buffer_size = 0;
+					memset(tcp_socket_buffer, 0x00, sizeof(tcp_socket_buffer));
+
+					tcp_socket_buffer_size =
+							get_bg96_socket_recevice_buffer_data(
+									tcp_socket_buffer);
+
+					packet_header_0_t downlink_packet_header_0;
+					downlink_packet_header_0.value = tcp_socket_buffer[0];
+
+					if (downlink_packet_header_0.bits.PACKET_TYPE
+							== PACKET_TYPE_DOWNLINK_TIME_DATA_HEADER_0) {
+
+						time_stamp = tcp_socket_buffer[2] << 24;
+						time_stamp |= tcp_socket_buffer[3] << 16;
+						time_stamp |= tcp_socket_buffer[4] << 8;
+						time_stamp |= tcp_socket_buffer[5];
+
+						time_stamp_init = 0x01;
+
+						celluar_state = 0x01;
+
+					}
+				}
 
 			}
 
@@ -1357,7 +1436,7 @@ static void init_celluar() {
 
 			if (sara_u2_init_network_setup()) {
 
-				error = 0x01;
+				celluar_state = 0x01;
 
 			}
 
@@ -1375,7 +1454,7 @@ static void init_celluar() {
 
 #endif
 
-	if (!error) {
+	if (!celluar_state) {
 
 		NRF_LOG_INFO("celluar init error");
 		NRF_LOG_FLUSH();
@@ -1393,6 +1472,8 @@ static void init_celluar() {
 
 	uart_uninit();
 
+	return celluar_state;
+
 }
 
 static void update_setup_command() {
@@ -1401,7 +1482,7 @@ static void update_setup_command() {
 
 		uint8_t control_number = tcp_socket_buffer[0];
 
-		if (radio_packet_protocol.Packet.control_number != control_number) {
+		if (command_id != control_number) {
 
 			uint32_t collection_cycle = tcp_socket_buffer[1] << 24;
 			collection_cycle |= tcp_socket_buffer[2] << 16;
@@ -1413,8 +1494,7 @@ static void update_setup_command() {
 				collection_cycle_timeout_count = 0;
 				collection_cycle_timer_count = collection_cycle;
 
-				advertising_data[9] = control_number;
-				radio_packet_protocol.Packet.control_number = control_number;
+				command_id = control_number;
 
 			}
 
@@ -1438,8 +1518,8 @@ static void update_celluar() {
 
 			if (bg96_init_network_setup()) {
 
-				if (bg96_tcp_data_upload(radio_packet_protocol.buffer,
-						radio_packet_protocol_size)) {
+				if (bg96_tcp_data_upload(node_packet_data.buffer,
+						node_packet_data_size)) {
 
 					tcp_socket_buffer_size = 0;
 					memset(tcp_socket_buffer, 0x00, sizeof(tcp_socket_buffer));
@@ -1600,9 +1680,106 @@ static void gpio_init() {
 
 }
 
+static void build_event_packet(uint8_t device_role, uint8_t event_type) {
+
+//	uint8_t header_0;
+//	uint8_t header_1;
+//	uint8_t mac_address[8];
+//	uint8_t product_id[2];
+//	uint8_t event_value_0;
+//	uint8_t event_value_1;
+
+	packet_header_0.bits.DEVICE_ROLE = device_role;
+	packet_header_0.bits.PACKET_TYPE = PACKET_TYPE_UPLINK_EVENT_HEADER_0;
+
+	node_packet_data.Event_Packet.header_0 = packet_header_0.value;
+	node_packet_data.Event_Packet.header_1 = packet_header_1.value;
+
+	memcpy(node_packet_data.Event_Packet.mac_address, mac_address,
+			sizeof(mac_address));
+
+	node_packet_data.Event_Packet.product_id[0] = product_id.value >> 8;
+	node_packet_data.Event_Packet.product_id[1] = product_id.value;
+
+	packet_event_0.bits.EVENT_TYPE = event_type;
+	node_packet_data.Event_Packet.event_value_0 = packet_event_0.value;
+	node_packet_data.Event_Packet.event_value_1 = packet_event_1.value;
+
+	node_packet_data_size = NODE_EVENT_PACKET_SIZE;
+
+	NRF_LOG_INFO("build_event_packet");
+
+}
+
+static void build_sensor_data_packet(uint8_t device_role) {
+
+//	uint8_t header_0;
+//	uint8_t header_1;
+//	uint8_t mac_address[8];
+//	uint8_t packet_info; //11Byte
+//	uint8_t battery_value;
+//	uint8_t temperature[2];
+//	uint8_t ax[2];
+//	uint8_t ay[2];
+//	uint8_t az[2];
+//	uint8_t HDOP;
+//	uint8_t latitude[4];
+//	uint8_t longitude[4];
+
+	packet_header_0.bits.DEVICE_ROLE = device_role;
+	packet_header_0.bits.PACKET_TYPE = PACKET_TYPE_UPLINK_SENSOR_DATA_HEADER_0;
+
+	node_packet_data.Data_Packet.header_0 = packet_header_0.value;
+	node_packet_data.Data_Packet.header_1 = packet_header_1.value;
+
+	memcpy(node_packet_data.Data_Packet.mac_address, mac_address,
+			sizeof(mac_address));
+
+	node_packet_data.Data_Packet.packet_info = (command_id << 4) & 0xF0;
+	node_packet_data.Data_Packet.packet_info |= (packet_id & 0x0F);
+
+	node_packet_data.Data_Packet.battery_value = battery_value;
+
+	node_packet_data.Data_Packet.temperature[0] = temperature >> 8;
+	node_packet_data.Data_Packet.temperature[1] = temperature;
+
+	node_packet_data.Data_Packet.intterupt = intterupt;
+
+	node_packet_data.Data_Packet.ax[0] = ax >> 8;
+	node_packet_data.Data_Packet.ax[1] = ax;
+
+	node_packet_data.Data_Packet.ay[0] = ay >> 8;
+	node_packet_data.Data_Packet.ay[1] = ay;
+
+	node_packet_data.Data_Packet.az[0] = az >> 8;
+	node_packet_data.Data_Packet.az[1] = az;
+
+	node_packet_data.Data_Packet.roll[0] = roll >> 8;
+	node_packet_data.Data_Packet.roll[1] = roll;
+
+	node_packet_data.Data_Packet.pitch[0] = pitch >> 8;
+	node_packet_data.Data_Packet.pitch[1] = pitch;
+
+	node_packet_data_size = NODE_DATA_PACKET_SIZE;
+
+	NRF_LOG_INFO("build_sensor_data_packet");
+
+}
+
 /**@brief Function for application main entry.
  */
 int main(void) {
+
+	uint8_t event_init = 0x00;
+	uint8_t event_type = EVENT_TYPE_POWER_ON;
+
+	uint8_t event_packet_ready = 0x00;
+	uint8_t sensor_data_packet_ready = 0x00;
+
+	uint8_t battery_read_step = 0x00;
+
+	uint8_t on_off_state = 0x01;
+	uint8_t on_off_count = 0;
 
 	uint32_t device_id_0 = NRF_FICR->DEVICEID[1];
 	uint32_t device_id_1 = NRF_FICR->DEVICEID[0];
@@ -1616,12 +1793,6 @@ int main(void) {
 	mac_address[5] = device_id_1 >> 16;
 	mac_address[6] = device_id_1 >> 8;
 	mac_address[7] = device_id_1;
-
-	memcpy(advertising_data, mac_address, sizeof(mac_address)); // 0 ~ 7 MAC Address
-	advertising_data[8] = 0x00; //8 Data Update
-	advertising_data[9] = 0x00; //9 Control Number
-
-	uint8_t battery_read_step = 0x00;
 
 	log_init();
 
@@ -1651,19 +1822,49 @@ int main(void) {
 
 	conn_params_init();
 
-	advertising_start();
-
 	app_timer_start(m_app_timer_id, APP_TIMER_DELAY, NULL);
+
+	/////////////////////// Init Protocol Data /////////////////////
+
+	packet_header_0.value = 0x00;
+	packet_header_0.bits.DEVICE_ROLE = 0x01;
+	packet_header_0.bits.PACKET_TYPE = PACKET_TYPE_UPLINK_EVENT_HEADER_0;
+	packet_header_0.bits.CHIP_MANUFACTURER = CHIP_MANUFACTURER_NORDIC;
+
+	packet_header_1.value = 0x00;
+	packet_header_1.bits.CHIP_IDENTIFIER = CHIP_IDENTIFIER_NRF52832;
+	packet_header_1.bits.COMMUNICATION_TYPE =
+	COMMUNICATION_TYPE_BLE_CONNECTION_1M;
+
+	product_id.value = 0x00;
+	product_id.bits.PRODUCT_ID = PRODUCT_ID_AA_MB_01;
+	product_id.bits.DEVICE_TYPE = 0x00;
+	product_id.bits.PRODUCT_TYPE = 0x01;
+
+	packet_event_0.value = 0x00;
+	packet_event_0.bits.EVENT_TYPE = EVENT_TYPE_POWER_ON;
+
+	packet_event_1.value = 0x00;
+
+	//////////////////// Start Application ///////////////////
 
 	wait_200ms();
 
 	twi_scan();
 
-	init_bma400();
+	if (!init_bma400()) {
+
+		packet_event_1.bits.BMA400_ERROR = 0x01;
+
+	}
 
 	set_si7051_i2c_instance(m_twi);
 
-	init_si7051();
+	if (!init_si7051()) {
+
+		packet_event_1.bits.SI7051_ERROR = 0x01;
+
+	}
 
 	nrf_gpio_pin_set(GPIO_BAT_EN);
 
@@ -1671,116 +1872,215 @@ int main(void) {
 
 	read_battery_level();
 
-	init_GPS();
+	if (!init_GPS()) {
 
-	init_celluar();
+		packet_event_1.bits.GPS_ERROR = 0x01;
+
+	}
+
+	if (!init_celluar()) {
+
+		packet_event_1.bits.CELLUAR_ERROR = 0x01;
+
+	}
 
 	init_state = 0x01;
 
+	//////////////////// Start Main Loop ///////////////////
+
+	event_packet_ready = 0x01;
+	data_update_state = 0x01;
+	advertising_init(data_update_state);
+
+	advertising_start();
+
 	NRF_LOG_INFO("Start main loop");
-
-	radio_packet_protocol.Packet.company_id[0] = COMPANY_ID >> 8;
-	radio_packet_protocol.Packet.company_id[1] = COMPANY_ID;
-
-	radio_packet_protocol.Packet.device_id[0] = DEVICE_TYPE >> 8;
-	radio_packet_protocol.Packet.device_id[1] = DEVICE_TYPE;
-
-	memcpy(radio_packet_protocol.Packet.mac_address, mac_address, 8);
-
-	radio_packet_protocol.Packet.control_number = 0;
 
 	for (;;) {
 
-		if (!nrf_gpio_pin_read(GPIO_BTN)) {
+		if (one_sec_timer_update) {
 
-			nrf_gpio_pin_toggle(GPIO_LED_0);
+			if (!nrf_gpio_pin_read(GPIO_BTN)) {
+
+				on_off_count += 1;
+
+				if (on_off_count >= 3) {
+
+					if (on_off_state) {
+
+						event_type = EVENT_TYPE_POWER_OFF;
+
+						NRF_LOG_INFO("EVENT_TYPE_POWER_OFF");
+
+					} else {
+
+						event_type = EVENT_TYPE_POWER_ON;
+
+						NRF_LOG_INFO("EVENT_TYPE_POWER_ON");
+
+					}
+
+					event_init = 0x00;
+					event_packet_ready = 0x01;
+					data_update_state = 0x01;
+
+					if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
+
+						adversting_stop();
+						gap_params_init();
+						advertising_init(data_update_state);
+						advertising_start();
+
+					} else {
+
+						sd_ble_gap_disconnect(m_conn_handle,
+						BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+
+					}
+
+					on_off_state = !on_off_state;
+					on_off_count = 0;
+
+					NRF_LOG_INFO("on_off_state %d", on_off_state);
+
+				}
+
+				nrf_gpio_pin_clear(GPIO_LED_0);
+
+			} else {
+
+				on_off_count = 0;
+
+				nrf_gpio_pin_set(GPIO_LED_0);
+
+			}
+
+			one_sec_timer_update = 0x00;
 
 		}
 
 		if (collection_gps_update) {
 
-			update_GPS();
+			packet_event_1.bits.GPS_ERROR = 0x00;
+
+			if (!update_GPS()) {
+
+				packet_event_1.bits.GPS_ERROR = 0x01;
+
+			}
 
 			collection_gps_update = 0x00;
 
 		}
 
-		if (collection_cycle_update) {
+		if (on_off_state && event_init) {
 
-			if (battery_read_step == 0x00) {
+			packet_event_1.bits.BMA400_ERROR = 0x00;
 
-				nrf_gpio_pin_set(GPIO_BAT_EN);
+			if (!bma400_acceleration_read(&ax_buffer, &ay_buffer, &az_buffer)) {
 
-				battery_read_step = 0x01;
+				packet_event_1.bits.BMA400_ERROR = 0x01;
 
 			} else {
 
-				read_battery_level();
+				uint32_t vector = powf(ax_buffer, 2);
+				vector += powf(ay_buffer, 2);
+				vector += powf(az_buffer, 2);
+				vector = sqrtf(vector);
 
-				get_si7051_temperature(&temperature);
+				if (vector > 1500) {
 
-				bma400_acceleration_read(&ax, &ay, &az);
-
-				payload_size = 0;
-				memset(payload, 0x00, sizeof(payload));
-
-				payload_size = sprintf((char*) payload, "%d.%d,",
-						(battery_value / 10), (battery_value % 10));
-
-				payload_size += sprintf((char*) payload + payload_size,
-						"%d.%d,", (temperature / 10), abs(temperature % 10));
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						ax);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						ay);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						az);
-
-				payload_size += sprintf((char*) payload + payload_size, "%ld,",
-						lat);
-
-				payload_size += sprintf((char*) payload + payload_size, "%ld",
-						lon);
-
-				NRF_LOG_INFO("PAYLOAD %s", payload);
-				NRF_LOG_FLUSH();
-
-				radio_packet_protocol_size = PACKET_HEADER_SIZE;
-				radio_packet_protocol_size += payload_size;
-				memcpy(radio_packet_protocol.Packet.payload, payload,
-						payload_size);
-
-				radio_packet_protocol_size = PACKET_HEADER_SIZE;
-				radio_packet_protocol_size += payload_size;
-				memcpy(radio_packet_protocol.Packet.payload, payload,
-						payload_size);
-
-				battery_read_step = 0x00;
-
-				collection_cycle_update = 0x00;
-
-				if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
-
-					adversting_stop();
-
-					gap_params_init();
-
-					advertising_init(data_update_state);
-
-					advertising_start();
+					intterupt_buffer += 1;
 
 				}
 
-				update_celluar();
+				if (vector > 800 && vector < 1200) {
 
-				battery_read_step = 0x00;
+					roll_buffer =
+							180
+									* atanf(
+											ay_buffer
+													/ sqrtf(
+															ax_buffer
+																	* ax_buffer
+																	+ az_buffer
+																			* az_buffer)) / M_PI;
+					pitch_buffer =
+							180
+									* atanf(
+											ax_buffer
+													/ sqrtf(
+															ay_buffer
+																	* ay_buffer
+																	+ az_buffer
+																			* az_buffer)) / M_PI;
 
-				data_update_state = 0x01;
+				}
 
-				collection_cycle_update = 0x00;
+			}
+
+			if (collection_cycle_update) {
+
+				if (battery_read_step == 0x00) {
+
+					nrf_gpio_pin_set(GPIO_BAT_EN);
+
+					battery_read_step = 0x01;
+
+				} else {
+
+					read_battery_level();
+
+					packet_event_1.bits.SI7051_ERROR = 0x00;
+
+					if (!get_si7051_temperature(&temperature)) {
+
+						packet_event_1.bits.SI7051_ERROR = 0x01;
+
+					}
+
+					intterupt = intterupt_buffer;
+
+					ax = ax_buffer;
+					ay = ay_buffer;
+					az = az_buffer;
+
+					roll = roll_buffer;
+					pitch = pitch_buffer;
+
+					packet_id += 1;
+
+					if (packet_id > 0x0F) {
+
+						packet_id = 0;
+
+					}
+
+					update_celluar();
+
+					sensor_data_packet_ready = 0x01;
+
+					battery_read_step = 0x00;
+
+					intterupt_buffer = 0;
+
+					collection_cycle_update = 0x00;
+
+					data_update_state = 0x01;
+
+					if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
+
+						adversting_stop();
+
+						gap_params_init();
+
+						advertising_init(data_update_state);
+
+						advertising_start();
+
+					}
+
+				}
 
 			}
 
@@ -1788,51 +2088,77 @@ int main(void) {
 
 		if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
 
-			if (aggregator_notify_enable_state) {
+			if (aggregator_notify_enable_state || stream_notify_enable_state) {
 
-				if (data_update_state) {
+				if (event_packet_ready || sensor_data_packet_ready) {
 
 					if (tx_complete_state == 0x01) {
 
 						tx_complete_state = 0x00;
 
-						ble_service_send_aggregator_notification(m_conn_handle,
-								&m_service, radio_packet_protocol.buffer,
-								radio_packet_protocol_size);
+						if (event_packet_ready == 0x01) {
 
-						data_update_state = 0x00;
+							build_event_packet(0x00, event_type);
 
-						NRF_LOG_INFO("Aggregator notify send");
+						} else if (sensor_data_packet_ready == 0x01) {
+
+							build_sensor_data_packet(0x00);
+
+						}
+
+						if (aggregator_notify_enable_state) {
+
+							ble_service_send_aggregator_notification(
+									m_conn_handle, &m_service,
+									node_packet_data.buffer,
+									node_packet_data_size);
+
+							NRF_LOG_INFO("Gateway notify send");
+
+						} else if (stream_notify_enable_state) {
+
+							ble_service_send_stream_notification(m_conn_handle,
+									&m_service, node_packet_data.buffer,
+									node_packet_data_size);
+
+							NRF_LOG_INFO("Stream notify send");
+
+						}
 
 					} else if (tx_complete_state == 0x02) {
 
-						disconnect_timeout_count = DISCONNECT_TIMEOUT;
+						if (event_packet_ready == 0x01) {
+
+							event_packet_ready = 0x00;
+
+						} else if (sensor_data_packet_ready == 0x01) {
+
+							sensor_data_packet_ready = 0x00;
+
+						}
+
+						if (!event_packet_ready && !sensor_data_packet_ready) {
+
+							data_update_state = 0x00;
+							disconnect_timeout_count = DISCONNECT_TIMEOUT;
+
+						} else {
+
+							tx_complete_state = 0x01;
+
+						}
+
+						event_init = 0x01;
 
 					}
 
 				}
 
-			} else if (stream_notify_enable_state) {
+				if (stream_notify_enable_state) {
 
-				if (data_update_state) {
-
-					if (tx_complete_state) {
-
-						tx_complete_state = 0x00;
-
-						ble_service_send_stream_notification(m_conn_handle,
-								&m_service, radio_packet_protocol.buffer,
-								radio_packet_protocol_size);
-
-						data_update_state = 0x00;
-
-						NRF_LOG_INFO("Stream notify send");
-
-					}
+					disconnect_timeout_count = 0;
 
 				}
-
-				disconnect_timeout_count = 0;
 
 			}
 
